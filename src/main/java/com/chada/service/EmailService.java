@@ -35,6 +35,7 @@ public class EmailService {
             System.err.println("CRITICAL ERROR: Email from address is not configured!");
             System.err.println("Please set MAIL_USERNAME environment variable in Railway");
             System.err.println("Current value: " + fromEmail);
+            System.err.println("Environment variable MAIL_USERNAME: " + System.getenv("MAIL_USERNAME"));
             System.err.println("========================================");
             return;
         }
@@ -44,6 +45,16 @@ public class EmailService {
             System.err.println("CRITICAL ERROR: Admin email address is not configured!");
             System.err.println("Please set ADMIN_EMAIL environment variable in Railway");
             System.err.println("Current value: " + adminEmail);
+            System.err.println("Environment variable ADMIN_EMAIL: " + System.getenv("ADMIN_EMAIL"));
+            System.err.println("========================================");
+            return;
+        }
+        
+        // Check if mail sender is configured
+        if (mailSender == null) {
+            System.err.println("========================================");
+            System.err.println("CRITICAL ERROR: JavaMailSender is not configured!");
+            System.err.println("Please check your email configuration in application.properties");
             System.err.println("========================================");
             return;
         }
@@ -52,7 +63,10 @@ public class EmailService {
         System.out.println("EMAIL SEND ATTEMPT - Order #" + order.getId());
         System.out.println("From: " + fromEmail);
         System.out.println("To: " + adminEmail);
-        System.out.println("Mail Host: " + (mailSender != null ? "configured" : "NULL"));
+        System.out.println("Mail Host: " + System.getenv().getOrDefault("MAIL_HOST", "smtp.gmail.com"));
+        System.out.println("Mail Port: " + System.getenv().getOrDefault("MAIL_PORT", "587"));
+        System.out.println("Mail Sender: " + (mailSender != null ? "configured" : "NULL"));
+        System.out.println("Environment: " + (System.getenv("RAILWAY_ENVIRONMENT") != null ? "Railway (Production)" : "Local"));
         System.out.println("========================================");
         
         try {
@@ -136,9 +150,11 @@ public class EmailService {
             System.err.println("Error Message: " + e.getMessage());
             if (e.getCause() != null) {
                 System.err.println("Cause: " + e.getCause().getMessage());
+                System.err.println("Cause Type: " + e.getCause().getClass().getName());
             }
-            System.err.println("========================================");
+            System.err.println("Stack Trace:");
             e.printStackTrace();
+            System.err.println("========================================");
             
             // Fallback to simple email
             try {
@@ -162,9 +178,21 @@ public class EmailService {
                 System.err.println("Error Message: " + ex.getMessage());
                 if (ex.getCause() != null) {
                     System.err.println("Cause: " + ex.getCause().getMessage());
+                    System.err.println("Cause Type: " + ex.getCause().getClass().getName());
                 }
-                System.err.println("========================================");
+                System.err.println("Stack Trace:");
                 ex.printStackTrace();
+                System.err.println("========================================");
+                
+                // Additional diagnostics for production
+                System.err.println("DIAGNOSTICS:");
+                System.err.println("- MAIL_HOST: " + System.getenv("MAIL_HOST"));
+                System.err.println("- MAIL_PORT: " + System.getenv("MAIL_PORT"));
+                System.err.println("- MAIL_USERNAME set: " + (System.getenv("MAIL_USERNAME") != null));
+                System.err.println("- MAIL_PASSWORD set: " + (System.getenv("MAIL_PASSWORD") != null));
+                System.err.println("- ADMIN_EMAIL set: " + (System.getenv("ADMIN_EMAIL") != null));
+                System.err.println("========================================");
+                
                 // Don't throw - just log the error so order creation doesn't fail
                 System.err.println("WARNING: Order was created but email notification failed!");
             }
