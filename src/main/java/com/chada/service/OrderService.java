@@ -66,9 +66,13 @@ public class OrderService {
         // Send email notification
         try {
             emailService.sendOrderNotification(savedOrder);
+            System.out.println("Email notification sent successfully for order #" + savedOrder.getId());
         } catch (Exception e) {
             // Log error but don't fail the order creation
-            System.err.println("Failed to send email notification: " + e.getMessage());
+            System.err.println("Failed to send email notification for order #" + savedOrder.getId() + ": " + e.getMessage());
+            e.printStackTrace();
+            // Log full stack trace for debugging
+            System.err.println("Email error details:");
             e.printStackTrace();
         }
 
