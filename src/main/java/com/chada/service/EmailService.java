@@ -25,7 +25,7 @@ public class EmailService {
     @Value("${spring.mail.username}")
     private String fromEmail;
 
-    @Value("${admin.email:khalidmimani@gmail.com}")
+    @Value("${admin.email:abderrahmane.mimani@gmail.com}")
     private String adminEmail;
 
     public void sendOrderNotification(Order order) {
@@ -59,13 +59,153 @@ public class EmailService {
             return;
         }
         
+        // Send email to customer (confirmation)
+        sendCustomerConfirmationEmail(order);
+        
+        // Send email to admin (notification)
+        sendAdminNotificationEmail(order);
+    }
+    
+    /**
+     * Send confirmation email to customer
+     */
+    private void sendCustomerConfirmationEmail(Order order) {
+        if (order.getCustomerEmail() == null || order.getCustomerEmail().isEmpty()) {
+            System.out.println("Skipping customer email - no customer email provided for order #" + order.getId());
+            return;
+        }
+        
         System.out.println("========================================");
-        System.out.println("EMAIL SEND ATTEMPT - Order #" + order.getId());
+        System.out.println("SENDING CUSTOMER CONFIRMATION EMAIL - Order #" + order.getId());
+        System.out.println("From: " + fromEmail);
+        System.out.println("To: " + order.getCustomerEmail());
+        System.out.println("========================================");
+        
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setFrom(fromEmail);
+            helper.setTo(order.getCustomerEmail());
+            helper.setSubject("تأكيد الطلب - Order #" + order.getId());
+
+            // Build email body
+            StringBuilder emailBody = new StringBuilder();
+            emailBody.append("<!DOCTYPE html>");
+            emailBody.append("<html dir='rtl' lang='ar'>");
+            emailBody.append("<head><meta charset='UTF-8'></head>");
+            emailBody.append("<body style='font-family: Arial, sans-serif; padding: 20px; background-color: #f5f5f5;'>");
+            emailBody.append("<div style='max-width: 600px; margin: 0 auto; background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);'>");
+            
+            emailBody.append("<h1 style='color: #1a2f4d; text-align: center; margin-bottom: 30px;'>شكراً لك على طلبك!</h1>");
+            emailBody.append("<p style='text-align: center; color: #666; font-size: 16px; margin-bottom: 30px;'>تم استلام طلبك بنجاح وسنتواصل معك قريباً</p>");
+            
+            emailBody.append("<div style='background-color: #f0f9ff; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #1a2f4d;'>");
+            emailBody.append("<h2 style='color: #1a2f4d; margin-top: 0;'>معلومات الطلب</h2>");
+            emailBody.append("<p><strong>رقم الطلب:</strong> #").append(order.getId()).append("</p>");
+            emailBody.append("<p><strong>التاريخ:</strong> ").append(order.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))).append("</p>");
+            emailBody.append("<p><strong>الحالة:</strong> قيد المعالجة</p>");
+            emailBody.append("</div>");
+
+            emailBody.append("<div style='background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin-bottom: 20px;'>");
+            emailBody.append("<h2 style='color: #d4af37; margin-top: 0;'>المنتجات</h2>");
+            emailBody.append("<table style='width: 100%; border-collapse: collapse;'>");
+            emailBody.append("<thead><tr style='background-color: #1a2f4d; color: white;'>");
+            emailBody.append("<th style='padding: 10px; text-align: right;'>المنتج</th>");
+            emailBody.append("<th style='padding: 10px; text-align: center;'>الكمية</th>");
+            emailBody.append("<th style='padding: 10px; text-align: left;'>السعر</th>");
+            emailBody.append("<th style='padding: 10px; text-align: left;'>الإجمالي</th>");
+            emailBody.append("</tr></thead>");
+            emailBody.append("<tbody>");
+
+            DecimalFormat df = new DecimalFormat("#,##0.00");
+            for (OrderItem item : order.getItems()) {
+                emailBody.append("<tr style='border-bottom: 1px solid #eee;'>");
+                emailBody.append("<td style='padding: 10px;'>").append(item.getProduct().getName()).append("</td>");
+                emailBody.append("<td style='padding: 10px; text-align: center;'>").append(item.getQuantity()).append("</td>");
+                emailBody.append("<td style='padding: 10px;'>").append(df.format(item.getPrice())).append(" د.م</td>");
+                emailBody.append("<td style='padding: 10px;'>").append(df.format(item.getSubtotal())).append(" د.م</td>");
+                emailBody.append("</tr>");
+            }
+
+            emailBody.append("</tbody>");
+            emailBody.append("</table>");
+            emailBody.append("</div>");
+
+            emailBody.append("<div style='background-color: #d4af37; color: white; padding: 20px; border-radius: 8px; text-align: center;'>");
+            emailBody.append("<h2 style='margin: 0; font-size: 24px;'>الإجمالي: ").append(df.format(order.getTotalAmount())).append(" د.م</h2>");
+            emailBody.append("</div>");
+            
+            emailBody.append("<div style='background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin-top: 20px; text-align: center;'>");
+            emailBody.append("<p style='margin: 0; color: #666;'>سنقوم بالاتصال بك قريباً لتأكيد الطلب</p>");
+            emailBody.append("<p style='margin: 10px 0 0 0; color: #666;'>شكراً لاختيارك عطور الشدا</p>");
+            emailBody.append("</div>");
+
+            emailBody.append("</div>");
+            emailBody.append("</body>");
+            emailBody.append("</html>");
+
+            helper.setText(emailBody.toString(), true);
+            mailSender.send(message);
+            System.out.println("========================================");
+            System.out.println("SUCCESS: Customer confirmation email sent successfully!");
+            System.out.println("Order #" + order.getId() + " to " + order.getCustomerEmail());
+            System.out.println("========================================");
+        } catch (MessagingException e) {
+            System.err.println("========================================");
+            System.err.println("ERROR: Failed to send customer confirmation email for order #" + order.getId());
+            System.err.println("Error Type: " + e.getClass().getName());
+            System.err.println("Error Message: " + e.getMessage());
+            if (e.getCause() != null) {
+                System.err.println("Cause: " + e.getCause().getMessage());
+                System.err.println("Cause Type: " + e.getCause().getClass().getName());
+            }
+            System.err.println("Stack Trace:");
+            e.printStackTrace();
+            System.err.println("========================================");
+            
+            // Fallback to simple email for customer
+            try {
+                System.out.println("Attempting to send simple customer email as fallback...");
+                SimpleMailMessage simpleMessage = new SimpleMailMessage();
+                simpleMessage.setFrom(fromEmail);
+                simpleMessage.setTo(order.getCustomerEmail());
+                simpleMessage.setSubject("تأكيد الطلب - Order #" + order.getId());
+                simpleMessage.setText("شكراً لك على طلبك!\n\n" +
+                    "رقم الطلب: #" + order.getId() + 
+                    "\nالتاريخ: " + order.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) +
+                    "\nالإجمالي: " + order.getTotalAmount() + " د.م\n\n" +
+                    "سنقوم بالاتصال بك قريباً لتأكيد الطلب.\nشكراً لاختيارك عطور الشدا");
+                mailSender.send(simpleMessage);
+                System.out.println("SUCCESS: Simple customer email sent successfully for order #" + order.getId());
+            } catch (Exception ex) {
+                System.err.println("Failed to send simple customer email fallback: " + ex.getMessage());
+                ex.printStackTrace();
+            }
+        } catch (Exception e) {
+            System.err.println("========================================");
+            System.err.println("CRITICAL: Unexpected error while sending customer confirmation email!");
+            System.err.println("Order #" + order.getId());
+            System.err.println("Error Type: " + e.getClass().getName());
+            System.err.println("Error Message: " + e.getMessage());
+            if (e.getCause() != null) {
+                System.err.println("Cause: " + e.getCause().getMessage());
+            }
+            System.err.println("========================================");
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Send notification email to admin
+     */
+    private void sendAdminNotificationEmail(Order order) {
+        System.out.println("========================================");
+        System.out.println("SENDING ADMIN NOTIFICATION EMAIL - Order #" + order.getId());
         System.out.println("From: " + fromEmail);
         System.out.println("To: " + adminEmail);
         System.out.println("Mail Host: " + System.getenv().getOrDefault("MAIL_HOST", "smtp.gmail.com"));
         System.out.println("Mail Port: " + System.getenv().getOrDefault("MAIL_PORT", "587"));
-        System.out.println("Mail Sender: " + (mailSender != null ? "configured" : "NULL"));
         System.out.println("Environment: " + (System.getenv("RAILWAY_ENVIRONMENT") != null ? "Railway (Production)" : "Local"));
         System.out.println("========================================");
         
@@ -77,7 +217,7 @@ public class EmailService {
             helper.setTo(adminEmail);
             helper.setSubject("طلب جديد - Order #" + order.getId());
 
-            // Build email body
+            // Build admin notification email body
             StringBuilder emailBody = new StringBuilder();
             emailBody.append("<!DOCTYPE html>");
             emailBody.append("<html dir='rtl' lang='ar'>");
@@ -140,12 +280,12 @@ public class EmailService {
             helper.setText(emailBody.toString(), true);
             mailSender.send(message);
             System.out.println("========================================");
-            System.out.println("SUCCESS: Email notification sent successfully!");
-            System.out.println("Order #" + order.getId());
+            System.out.println("SUCCESS: Admin notification email sent successfully!");
+            System.out.println("Order #" + order.getId() + " to " + adminEmail);
             System.out.println("========================================");
         } catch (MessagingException e) {
             System.err.println("========================================");
-            System.err.println("ERROR: Failed to send HTML email for order #" + order.getId());
+            System.err.println("ERROR: Failed to send admin notification email for order #" + order.getId());
             System.err.println("Error Type: " + e.getClass().getName());
             System.err.println("Error Message: " + e.getMessage());
             if (e.getCause() != null) {
@@ -156,9 +296,9 @@ public class EmailService {
             e.printStackTrace();
             System.err.println("========================================");
             
-            // Fallback to simple email
+            // Fallback to simple email for admin
             try {
-                System.out.println("Attempting to send simple email as fallback...");
+                System.out.println("Attempting to send simple admin email as fallback...");
                 SimpleMailMessage simpleMessage = new SimpleMailMessage();
                 simpleMessage.setFrom(fromEmail);
                 simpleMessage.setTo(adminEmail);
@@ -169,10 +309,10 @@ public class EmailService {
                     "\nالهاتف: " + order.getCustomerPhone() + 
                     "\nالإجمالي: " + order.getTotalAmount() + " د.م");
                 mailSender.send(simpleMessage);
-                System.out.println("SUCCESS: Simple email sent successfully for order #" + order.getId());
+                System.out.println("SUCCESS: Simple admin email sent successfully for order #" + order.getId());
             } catch (Exception ex) {
                 System.err.println("========================================");
-                System.err.println("CRITICAL: Failed to send simple email fallback!");
+                System.err.println("CRITICAL: Failed to send simple admin email fallback!");
                 System.err.println("Order #" + order.getId());
                 System.err.println("Error Type: " + ex.getClass().getName());
                 System.err.println("Error Message: " + ex.getMessage());
@@ -194,11 +334,11 @@ public class EmailService {
                 System.err.println("========================================");
                 
                 // Don't throw - just log the error so order creation doesn't fail
-                System.err.println("WARNING: Order was created but email notification failed!");
+                System.err.println("WARNING: Order was created but admin email notification failed!");
             }
         } catch (Exception e) {
             System.err.println("========================================");
-            System.err.println("CRITICAL: Unexpected error while sending email!");
+            System.err.println("CRITICAL: Unexpected error while sending admin notification email!");
             System.err.println("Order #" + order.getId());
             System.err.println("Error Type: " + e.getClass().getName());
             System.err.println("Error Message: " + e.getMessage());
@@ -208,7 +348,7 @@ public class EmailService {
             System.err.println("========================================");
             e.printStackTrace();
             // Don't throw - just log the error so order creation doesn't fail
-            System.err.println("WARNING: Order was created but email notification failed!");
+            System.err.println("WARNING: Order was created but admin email notification failed!");
         }
     }
     
