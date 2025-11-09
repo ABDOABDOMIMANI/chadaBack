@@ -14,11 +14,12 @@ public class CorsConfig {
             @Override
             public void addCorsMappings(CorsRegistry registry) {
                 registry.addMapping("/**")
-                        .allowedOrigins(
-                                "http://localhost:3000",
-                                "http://localhost:3001",
+                        .allowedOriginPatterns(
+                                "http://localhost:*",
+                                "https://*.netlify.app",
                                 "https://chadaparfum.netlify.app",
-                                "https://chadaback-production.up.railway.app"
+                                "https://chadaback-production.up.railway.app",
+                                "https://chada-admin.netlify.app/login"
                         )
                         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
                         .allowedHeaders("*")
