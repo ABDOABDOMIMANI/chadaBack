@@ -29,19 +29,31 @@ public class EmailService {
     private String adminEmail;
 
     public void sendOrderNotification(Order order) {
+        // Enhanced validation and logging for production
         if (fromEmail == null || fromEmail.isEmpty()) {
-            System.err.println("ERROR: Email from address is not configured. Check spring.mail.username in application.properties");
+            System.err.println("========================================");
+            System.err.println("CRITICAL ERROR: Email from address is not configured!");
+            System.err.println("Please set MAIL_USERNAME environment variable in Railway");
+            System.err.println("Current value: " + fromEmail);
+            System.err.println("========================================");
             return;
         }
         
         if (adminEmail == null || adminEmail.isEmpty()) {
-            System.err.println("ERROR: Admin email address is not configured. Check admin.email in application.properties");
+            System.err.println("========================================");
+            System.err.println("CRITICAL ERROR: Admin email address is not configured!");
+            System.err.println("Please set ADMIN_EMAIL environment variable in Railway");
+            System.err.println("Current value: " + adminEmail);
+            System.err.println("========================================");
             return;
         }
         
-        System.out.println("Attempting to send email notification for order #" + order.getId());
+        System.out.println("========================================");
+        System.out.println("EMAIL SEND ATTEMPT - Order #" + order.getId());
         System.out.println("From: " + fromEmail);
         System.out.println("To: " + adminEmail);
+        System.out.println("Mail Host: " + (mailSender != null ? "configured" : "NULL"));
+        System.out.println("========================================");
         
         try {
             MimeMessage message = mailSender.createMimeMessage();
@@ -113,10 +125,19 @@ public class EmailService {
 
             helper.setText(emailBody.toString(), true);
             mailSender.send(message);
-            System.out.println("SUCCESS: Email notification sent successfully for order #" + order.getId());
+            System.out.println("========================================");
+            System.out.println("SUCCESS: Email notification sent successfully!");
+            System.out.println("Order #" + order.getId());
+            System.out.println("========================================");
         } catch (MessagingException e) {
+            System.err.println("========================================");
             System.err.println("ERROR: Failed to send HTML email for order #" + order.getId());
-            System.err.println("Error message: " + e.getMessage());
+            System.err.println("Error Type: " + e.getClass().getName());
+            System.err.println("Error Message: " + e.getMessage());
+            if (e.getCause() != null) {
+                System.err.println("Cause: " + e.getCause().getMessage());
+            }
+            System.err.println("========================================");
             e.printStackTrace();
             
             // Fallback to simple email
@@ -134,16 +155,32 @@ public class EmailService {
                 mailSender.send(simpleMessage);
                 System.out.println("SUCCESS: Simple email sent successfully for order #" + order.getId());
             } catch (Exception ex) {
-                System.err.println("ERROR: Failed to send simple email fallback for order #" + order.getId());
-                System.err.println("Error message: " + ex.getMessage());
+                System.err.println("========================================");
+                System.err.println("CRITICAL: Failed to send simple email fallback!");
+                System.err.println("Order #" + order.getId());
+                System.err.println("Error Type: " + ex.getClass().getName());
+                System.err.println("Error Message: " + ex.getMessage());
+                if (ex.getCause() != null) {
+                    System.err.println("Cause: " + ex.getCause().getMessage());
+                }
+                System.err.println("========================================");
                 ex.printStackTrace();
-                throw new RuntimeException("Failed to send email notification: " + ex.getMessage(), ex);
+                // Don't throw - just log the error so order creation doesn't fail
+                System.err.println("WARNING: Order was created but email notification failed!");
             }
         } catch (Exception e) {
-            System.err.println("ERROR: Unexpected error while sending email for order #" + order.getId());
-            System.err.println("Error message: " + e.getMessage());
+            System.err.println("========================================");
+            System.err.println("CRITICAL: Unexpected error while sending email!");
+            System.err.println("Order #" + order.getId());
+            System.err.println("Error Type: " + e.getClass().getName());
+            System.err.println("Error Message: " + e.getMessage());
+            if (e.getCause() != null) {
+                System.err.println("Cause: " + e.getCause().getMessage());
+            }
+            System.err.println("========================================");
             e.printStackTrace();
-            throw new RuntimeException("Failed to send email notification: " + e.getMessage(), e);
+            // Don't throw - just log the error so order creation doesn't fail
+            System.err.println("WARNING: Order was created but email notification failed!");
         }
     }
     
