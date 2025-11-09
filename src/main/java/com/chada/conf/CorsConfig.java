@@ -19,7 +19,7 @@ public class CorsConfig {
                                 "https://*.netlify.app",
                                 "https://chadaparfum.netlify.app",
                                 "https://chadaback-production.up.railway.app",
-                                "https://chada-admin.netlify.app/login"
+                                "https://chada-admin.netlify.app"
                         )
                         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
                         .allowedHeaders("*")

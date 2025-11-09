@@ -75,14 +75,30 @@ public class FileStorageService {
         // Check if it's an image file
         if (isImageFile(fileExtension)) {
             try {
-                // Optimize image before saving
-                InputStream optimizedImageStream = optimizeImage(file.getInputStream(), fileExtension);
+                // Try to optimize image before saving
+                // Reset input stream to beginning if possible
+                InputStream imageStream = file.getInputStream();
+                InputStream optimizedImageStream = optimizeImage(imageStream, fileExtension);
+                
+                // Copy optimized image
                 Files.copy(optimizedImageStream, targetLocation, StandardCopyOption.REPLACE_EXISTING);
                 optimizedImageStream.close();
+                
+                System.out.println("Successfully optimized and saved image: " + uniqueFileName);
             } catch (Exception e) {
-                // If optimization fails, save original
-                System.err.println("Warning: Image optimization failed, saving original: " + e.getMessage());
-                Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
+                // If optimization fails, save original - don't let optimization break uploads
+                System.err.println("Warning: Image optimization failed for " + uniqueFileName + ", saving original: " + e.getMessage());
+                e.printStackTrace();
+                try {
+                    // Reset and save original
+                    InputStream originalStream = file.getInputStream();
+                    Files.copy(originalStream, targetLocation, StandardCopyOption.REPLACE_EXISTING);
+                    originalStream.close();
+                    System.out.println("Saved original image (optimization skipped): " + uniqueFileName);
+                } catch (IOException ioException) {
+                    System.err.println("CRITICAL: Failed to save image even as original: " + ioException.getMessage());
+                    throw ioException;
+                }
             }
         } else {
             // Not an image, save as-is

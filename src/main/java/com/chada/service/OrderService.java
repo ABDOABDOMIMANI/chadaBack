@@ -1,5 +1,6 @@
 package com.chada.service;
 
+import com.chada.controller.WebSocketController;
 import com.chada.dto.MonthlySalesDTO;
 import com.chada.entity.Order;
 import com.chada.entity.OrderItem;
@@ -27,6 +28,7 @@ public class OrderService {
     private final ProductRepository productRepository;
     private final EmailService emailService;
     private final SmsService smsService;
+    private final WebSocketController webSocketController;
 
     public Order createOrder(Order order) {
         if (order.getItems() == null || order.getItems().isEmpty()) {
@@ -84,6 +86,16 @@ public class OrderService {
         } catch (Exception e) {
             // Log error but don't fail the order creation
             System.err.println("Failed to send SMS notification: " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        // Broadcast WebSocket notification for real-time updates
+        try {
+            webSocketController.broadcastNewOrder(savedOrder);
+            System.out.println("WebSocket notification broadcasted for order #" + savedOrder.getId());
+        } catch (Exception e) {
+            // Log error but don't fail the order creation
+            System.err.println("Failed to broadcast WebSocket notification: " + e.getMessage());
             e.printStackTrace();
         }
 
