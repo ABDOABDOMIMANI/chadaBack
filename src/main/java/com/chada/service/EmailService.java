@@ -29,6 +29,20 @@ public class EmailService {
     private String adminEmail;
 
     public void sendOrderNotification(Order order) {
+        if (fromEmail == null || fromEmail.isEmpty()) {
+            System.err.println("ERROR: Email from address is not configured. Check spring.mail.username in application.properties");
+            return;
+        }
+        
+        if (adminEmail == null || adminEmail.isEmpty()) {
+            System.err.println("ERROR: Admin email address is not configured. Check admin.email in application.properties");
+            return;
+        }
+        
+        System.out.println("Attempting to send email notification for order #" + order.getId());
+        System.out.println("From: " + fromEmail);
+        System.out.println("To: " + adminEmail);
+        
         try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
@@ -99,10 +113,15 @@ public class EmailService {
 
             helper.setText(emailBody.toString(), true);
             mailSender.send(message);
+            System.out.println("SUCCESS: Email notification sent successfully for order #" + order.getId());
         } catch (MessagingException e) {
+            System.err.println("ERROR: Failed to send HTML email for order #" + order.getId());
+            System.err.println("Error message: " + e.getMessage());
             e.printStackTrace();
+            
             // Fallback to simple email
             try {
+                System.out.println("Attempting to send simple email as fallback...");
                 SimpleMailMessage simpleMessage = new SimpleMailMessage();
                 simpleMessage.setFrom(fromEmail);
                 simpleMessage.setTo(adminEmail);
@@ -113,9 +132,18 @@ public class EmailService {
                     "\nالهاتف: " + order.getCustomerPhone() + 
                     "\nالإجمالي: " + order.getTotalAmount() + " د.م");
                 mailSender.send(simpleMessage);
+                System.out.println("SUCCESS: Simple email sent successfully for order #" + order.getId());
             } catch (Exception ex) {
+                System.err.println("ERROR: Failed to send simple email fallback for order #" + order.getId());
+                System.err.println("Error message: " + ex.getMessage());
                 ex.printStackTrace();
+                throw new RuntimeException("Failed to send email notification: " + ex.getMessage(), ex);
             }
+        } catch (Exception e) {
+            System.err.println("ERROR: Unexpected error while sending email for order #" + order.getId());
+            System.err.println("Error message: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("Failed to send email notification: " + e.getMessage(), e);
         }
     }
     
