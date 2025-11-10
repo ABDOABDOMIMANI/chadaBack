@@ -158,3 +158,4 @@ If email still doesn't work after trying all steps:
 
 **Note:** Email sending failures will NOT prevent order creation. Orders will still be saved even if email fails.
 
+

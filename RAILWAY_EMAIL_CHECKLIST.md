@@ -152,3 +152,4 @@ If Gmail doesn't work, consider:
 
 **Remember:** Email failures will NOT prevent order creation. Orders are always saved, even if email fails.
 
+

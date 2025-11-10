@@ -27,11 +27,11 @@ public class Product {
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    @Column(nullable = false)
-    private BigDecimal price;
+    @Column(nullable = true)
+    private BigDecimal price; // Can be null if using per-image pricing
 
-    @Column(nullable = false)
-    private Integer stock;
+    @Column(nullable = true)
+    private Integer stock; // Can be null if using per-image stock
 
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "category_id", nullable = false)
@@ -50,6 +50,7 @@ public class Product {
     private Integer volume;
 
     @Column(nullable = false)
+    @Builder.Default
     private Boolean active = true;
 
     // Promotion fields

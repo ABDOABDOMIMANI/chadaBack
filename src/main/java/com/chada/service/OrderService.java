@@ -48,7 +48,12 @@ public class OrderService {
             item.setOrder(order);
 
             // Use price from request if provided (image-specific price), otherwise use product price
+            // If product price is null (per-image pricing), item price must be provided
             BigDecimal itemPrice = item.getPrice() != null ? item.getPrice() : product.getPrice();
+            if (itemPrice == null) {
+                throw new RuntimeException("Price is required for product " + product.getId() + 
+                        " (product uses per-image pricing, please specify price in order item)");
+            }
             item.setPrice(itemPrice);
 
             // Add subtotal to total
@@ -165,8 +170,16 @@ public class OrderService {
                 Product latestProduct = productRepository.findById(product.getId())
                         .orElseThrow(() -> new RuntimeException("Product not found with id " + product.getId()));
                 
-                int currentStock = latestProduct.getStock();
+                // Handle per-image stock: if product stock is null, stock is managed per-image
+                Integer currentStock = latestProduct.getStock();
                 int quantityToDeduct = item.getQuantity();
+                
+                // If product uses per-image stock (stock is null), skip stock management
+                // Stock is managed via imageDetails in the frontend
+                if (currentStock == null) {
+                    System.out.println("Product " + latestProduct.getId() + " uses per-image stock management. Skipping product-level stock update.");
+                    continue;
+                }
                 
                 // Check if sufficient stock is available
                 if (currentStock < quantityToDeduct) {
@@ -211,7 +224,15 @@ public class OrderService {
                 Product latestProduct = productRepository.findById(product.getId())
                         .orElseThrow(() -> new RuntimeException("Product not found with id " + product.getId()));
                 
-                int currentStock = latestProduct.getStock();
+                // Handle per-image stock: if product stock is null, stock is managed per-image
+                Integer currentStock = latestProduct.getStock();
+                
+                // If product uses per-image stock (stock is null), skip stock management
+                if (currentStock == null) {
+                    System.out.println("Product " + latestProduct.getId() + " uses per-image stock management. Skipping product-level stock restore.");
+                    continue;
+                }
+                
                 int quantityToRestore = item.getQuantity();
                 int newStock = currentStock + quantityToRestore;
                 

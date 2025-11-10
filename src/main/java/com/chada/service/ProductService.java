@@ -143,15 +143,17 @@ public class ProductService {
     
     private void handlePromotionPricing(Product product) {
         if (product.getDiscountPercentage() != null && product.getDiscountPercentage() > 0) {
-            // If original price is not set, use current price as original
-            if (product.getOriginalPrice() == null) {
+            // If original price is not set, use current price as original (if price exists)
+            if (product.getOriginalPrice() == null && product.getPrice() != null) {
                 product.setOriginalPrice(product.getPrice());
             }
-            // Calculate discounted price
-            BigDecimal discountAmount = product.getOriginalPrice()
-                    .multiply(BigDecimal.valueOf(product.getDiscountPercentage()))
-                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-            product.setPrice(product.getOriginalPrice().subtract(discountAmount));
+            // Calculate discounted price only if original price exists
+            if (product.getOriginalPrice() != null) {
+                BigDecimal discountAmount = product.getOriginalPrice()
+                        .multiply(BigDecimal.valueOf(product.getDiscountPercentage()))
+                        .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+                product.setPrice(product.getOriginalPrice().subtract(discountAmount));
+            }
         } else {
             // No promotion, clear promotion fields
             product.setDiscountPercentage(null);
