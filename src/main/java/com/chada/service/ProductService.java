@@ -1,19 +1,21 @@
 package com.chada.service;
 
+import com.chada.dto.ProductImageDTO;
 import com.chada.entity.Category;
 import com.chada.entity.Product;
 import com.chada.repository.CategoryRepository;
 import com.chada.repository.ProductRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -23,10 +25,36 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final EmailService emailService;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
-    // ✅ Get only active products
+    // ✅ Get only active products (with at least one image having quantity > 0)
     public List<Product> getActiveProducts() {
-        return productRepository.findByActiveTrue();
+        List<Product> allActive = productRepository.findByActiveTrue();
+        // Filter products that have at least one image with quantity > 0
+        return allActive.stream()
+                .filter(product -> hasAvailableStock(product))
+                .collect(Collectors.toList());
+    }
+    
+    // Check if product has at least one image with quantity > 0
+    private boolean hasAvailableStock(Product product) {
+        if (product.getImageDetails() == null || product.getImageDetails().isEmpty()) {
+            return false; // No images, product not available
+        }
+        
+        try {
+            List<ProductImageDTO> imageDetails = objectMapper.readValue(
+                    product.getImageDetails(),
+                    new TypeReference<List<ProductImageDTO>>() {}
+            );
+            
+            // Check if at least one image has quantity > 0
+            return imageDetails.stream()
+                    .anyMatch(img -> img.getQuantity() != null && img.getQuantity() > 0);
+        } catch (Exception e) {
+            logger.warn("Failed to parse imageDetails for product {}: {}", product.getId(), e.getMessage());
+            return false; // If parsing fails, consider product unavailable
+        }
     }
 
     // ✅ Get all products (admin)
@@ -57,16 +85,7 @@ public class ProductService {
         product.setCategory(category);
         product.setActive(true);
         
-        // Set default values for price and stock if null (for per-image pricing/stock)
-        // Database may still have NOT NULL constraint, so we set 0 as placeholder
-        if (product.getPrice() == null) {
-            product.setPrice(BigDecimal.ZERO);
-        }
-        if (product.getStock() == null) {
-            product.setStock(0);
-        }
-        
-        // Handle promotion pricing
+        // Handle promotion pricing (applies to all images in imageDetails)
         handlePromotionPricing(product);
 
         Product saved = productRepository.save(product);
@@ -80,15 +99,9 @@ public class ProductService {
 
         existing.setName(updatedProduct.getName());
         existing.setDescription(updatedProduct.getDescription());
-        // Set default values for stock if null (for per-image stock)
-        if (updatedProduct.getStock() != null) {
-            existing.setStock(updatedProduct.getStock());
-        } else {
-            existing.setStock(0); // Default to 0 if null (per-image stock)
-        }
         existing.setImageUrl(updatedProduct.getImageUrl());
         existing.setImageUrls(updatedProduct.getImageUrls());
-        existing.setImageDetails(updatedProduct.getImageDetails()); // New field for image details
+        existing.setImageDetails(updatedProduct.getImageDetails()); // Contains price and quantity per image
         existing.setFragrance(updatedProduct.getFragrance());
         existing.setVolume(updatedProduct.getVolume());
         existing.setActive(updatedProduct.getActive());
@@ -99,91 +112,70 @@ public class ProductService {
             existing.setCategory(category);
         }
         
-        // Handle promotion pricing
+        // Handle promotion pricing (applies discount to all images in imageDetails)
         if (updatedProduct.getDiscountPercentage() != null && updatedProduct.getDiscountPercentage() > 0) {
             // There's a promotion
-            // Set promotion fields
             existing.setDiscountPercentage(updatedProduct.getDiscountPercentage());
             existing.setPromotionStartDate(updatedProduct.getPromotionStartDate());
             existing.setPromotionEndDate(updatedProduct.getPromotionEndDate());
             
-            // Original price should be provided from frontend
+            // Original price should be provided from frontend (average or base price)
             if (updatedProduct.getOriginalPrice() != null) {
                 existing.setOriginalPrice(updatedProduct.getOriginalPrice());
-            } else {
-                // Fallback: if original price not provided, use the current price as original
-                // This shouldn't happen if frontend sends data correctly
-                if (existing.getOriginalPrice() == null) {
-                    existing.setOriginalPrice(existing.getPrice());
-                }
             }
-            
-            // Calculate discounted price from original price
-            BigDecimal discountAmount = existing.getOriginalPrice()
-                    .multiply(BigDecimal.valueOf(existing.getDiscountPercentage()))
-                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-            existing.setPrice(existing.getOriginalPrice().subtract(discountAmount));
         } else {
             // No promotion - clear promotion fields
             existing.setDiscountPercentage(null);
             existing.setPromotionStartDate(null);
             existing.setPromotionEndDate(null);
-            
-            // Use the price provided by the user (this is the actual price when no promotion)
-            if (updatedProduct.getPrice() != null) {
-                existing.setPrice(updatedProduct.getPrice());
-                // Clear original price since there's no promotion
-                existing.setOriginalPrice(null);
-            } else {
-                // If price not provided, set to 0 (per-image pricing)
-                existing.setPrice(BigDecimal.ZERO);
-                // If we had a promotion, clear original price
-                existing.setOriginalPrice(null);
-            }
+            existing.setOriginalPrice(null);
         }
 
         Product saved = productRepository.save(existing);
         
-        // Check if stock is low (less than 3) and send alert
-        if (saved.getStock() != null && saved.getStock() < 3 && saved.getActive()) {
-            try {
-                emailService.sendLowStockAlert(saved);
-            } catch (Exception e) {
-                logger.error("Failed to send low stock alert email for product {}: {}", saved.getId(), e.getMessage(), e);
-            }
-        }
+        // Check if any image has low stock (less than 3) and send alert
+        checkLowStockAndSendAlert(saved);
         
         return saved;
     }
     
     private void handlePromotionPricing(Product product) {
-        if (product.getDiscountPercentage() != null && product.getDiscountPercentage() > 0) {
-            // If original price is not set, use current price as original (if price exists)
-            if (product.getOriginalPrice() == null && product.getPrice() != null && product.getPrice().compareTo(BigDecimal.ZERO) > 0) {
-                product.setOriginalPrice(product.getPrice());
-            }
-            // Calculate discounted price only if original price exists
-            if (product.getOriginalPrice() != null && product.getOriginalPrice().compareTo(BigDecimal.ZERO) > 0) {
-                BigDecimal discountAmount = product.getOriginalPrice()
-                        .multiply(BigDecimal.valueOf(product.getDiscountPercentage()))
-                        .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-                product.setPrice(product.getOriginalPrice().subtract(discountAmount));
-            } else {
-                // If no valid original price, ensure price is at least 0
-                if (product.getPrice() == null) {
-                    product.setPrice(BigDecimal.ZERO);
-                }
-            }
-        } else {
+        // Promotion pricing is now handled at the image level in imageDetails
+        // This method is kept for backward compatibility but doesn't modify product price/stock
+        if (product.getDiscountPercentage() == null || product.getDiscountPercentage() <= 0) {
             // No promotion, clear promotion fields
             product.setDiscountPercentage(null);
             product.setOriginalPrice(null);
             product.setPromotionStartDate(null);
             product.setPromotionEndDate(null);
-            // Ensure price is not null
-            if (product.getPrice() == null) {
-                product.setPrice(BigDecimal.ZERO);
+        }
+    }
+    
+    // Check if any image has low stock and send alert
+    private void checkLowStockAndSendAlert(Product product) {
+        if (!product.getActive() || product.getImageDetails() == null || product.getImageDetails().isEmpty()) {
+            return;
+        }
+        
+        try {
+            List<ProductImageDTO> imageDetails = objectMapper.readValue(
+                    product.getImageDetails(),
+                    new TypeReference<List<ProductImageDTO>>() {}
+            );
+            
+            // Check if any image has stock less than 3
+            boolean hasLowStock = imageDetails.stream()
+                    .anyMatch(img -> img.getQuantity() != null && img.getQuantity() > 0 && img.getQuantity() < 3);
+            
+            if (hasLowStock) {
+                try {
+                    emailService.sendLowStockAlert(product);
+                } catch (Exception e) {
+                    logger.error("Failed to send low stock alert email for product {}: {}", product.getId(), e.getMessage(), e);
+                }
             }
+        } catch (Exception e) {
+            logger.warn("Failed to parse imageDetails for low stock check for product {}: {}", product.getId(), e.getMessage());
         }
     }
 

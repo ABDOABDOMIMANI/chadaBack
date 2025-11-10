@@ -27,12 +27,6 @@ public class Product {
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    @Column(nullable = true)
-    private BigDecimal price; // Can be null if using per-image pricing
-
-    @Column(nullable = true)
-    private Integer stock; // Can be null if using per-image stock
-
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "category_id", nullable = false)
     @JsonIgnoreProperties({"products"}) // ignore product list inside category, but serialize category itself
@@ -80,26 +74,10 @@ public class Product {
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
-        // Ensure price and stock are never null (database constraint)
-        // Set to 0 as placeholder for per-image pricing/stock
-        if (this.price == null) {
-            this.price = BigDecimal.ZERO;
-        }
-        if (this.stock == null) {
-            this.stock = 0;
-        }
     }
 
     @PreUpdate
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
-        // Ensure price and stock are never null (database constraint)
-        // Set to 0 as placeholder for per-image pricing/stock
-        if (this.price == null) {
-            this.price = BigDecimal.ZERO;
-        }
-        if (this.stock == null) {
-            this.stock = 0;
-        }
     }
 }

@@ -50,17 +50,16 @@ public class OrderService {
             item.setProduct(product);
             item.setOrder(order);
 
-            // Use price from request if provided (image-specific price), otherwise use product price
-            // If product price is null (per-image pricing), item price must be provided
-            BigDecimal itemPrice = item.getPrice() != null ? item.getPrice() : product.getPrice();
-            if (itemPrice == null) {
+            // Price must be provided in the order item (from image-specific price)
+            // Products no longer have a global price, only per-image pricing
+            if (item.getPrice() == null) {
                 throw new RuntimeException("Price is required for product " + product.getId() + 
                         " (product uses per-image pricing, please specify price in order item)");
             }
-            item.setPrice(itemPrice);
+            // Price is already set in item from frontend (image-specific price)
 
             // Add subtotal to total
-            total = total.add(itemPrice.multiply(BigDecimal.valueOf(item.getQuantity())));
+            total = total.add(item.getPrice().multiply(BigDecimal.valueOf(item.getQuantity())));
         }
 
         // Set total amount and default status
@@ -152,90 +151,24 @@ public class OrderService {
     
     /**
      * Decrease product stock when order is created or status changes from CANCELLED
+     * Stock is now managed per-image in imageDetails, so this method is a no-op
+     * Stock management is handled in the frontend via imageDetails
      */
     private void decreaseProductStock(Order order) {
-        if (order.getItems() == null || order.getItems().isEmpty()) {
-            return;
-        }
-        
-        for (OrderItem item : order.getItems()) {
-            Product product = item.getProduct();
-            if (product != null) {
-                // Reload product to get latest stock
-                Product latestProduct = productRepository.findById(product.getId())
-                        .orElseThrow(() -> new RuntimeException("Product not found with id " + product.getId()));
-                
-                // Handle per-image stock: if product stock is null, stock is managed per-image
-                Integer currentStock = latestProduct.getStock();
-                int quantityToDeduct = item.getQuantity();
-                
-                // If product uses per-image stock (stock is null), skip stock management
-                // Stock is managed via imageDetails in the frontend
-                if (currentStock == null) {
-                    logger.debug("Product {} uses per-image stock management. Skipping product-level stock update.", latestProduct.getId());
-                    continue;
-                }
-                
-                // Check if sufficient stock is available
-                if (currentStock < quantityToDeduct) {
-                    throw new RuntimeException("Insufficient stock for product: " + latestProduct.getName() + 
-                            ". Available: " + currentStock + ", Required: " + quantityToDeduct);
-                }
-                
-                int newStock = currentStock - quantityToDeduct;
-                latestProduct.setStock(newStock);
-                productRepository.save(latestProduct);
-                
-                // Check if stock is low (less than 3) and send alert
-                if (newStock < 3 && latestProduct.getActive()) {
-                    try {
-                        emailService.sendLowStockAlert(latestProduct);
-                    } catch (Exception e) {
-                        logger.error("Failed to send low stock alert email for product {}: {}", latestProduct.getId(), e.getMessage(), e);
-                    }
-                }
-                
-                // Log if stock went to zero
-                if (newStock == 0) {
-                    logger.warn("Product {} ({}) stock is now 0", latestProduct.getId(), latestProduct.getName());
-                }
-            }
-        }
+        // Stock is managed per-image in imageDetails
+        // Frontend should update imageDetails when orders are created
+        logger.debug("Stock management is handled per-image in imageDetails. Skipping product-level stock update.");
     }
     
     /**
      * Restore product stock when order is cancelled
+     * Stock is now managed per-image in imageDetails, so this method is a no-op
+     * Stock management is handled in the frontend via imageDetails
      */
     private void restoreProductStock(Order order) {
-        if (order.getItems() == null || order.getItems().isEmpty()) {
-            return;
-        }
-        
-        for (OrderItem item : order.getItems()) {
-            Product product = item.getProduct();
-            if (product != null) {
-                // Reload product to get latest stock
-                Product latestProduct = productRepository.findById(product.getId())
-                        .orElseThrow(() -> new RuntimeException("Product not found with id " + product.getId()));
-                
-                // Handle per-image stock: if product stock is null, stock is managed per-image
-                Integer currentStock = latestProduct.getStock();
-                
-                // If product uses per-image stock (stock is null), skip stock management
-                if (currentStock == null) {
-                    logger.debug("Product {} uses per-image stock management. Skipping product-level stock restore.", latestProduct.getId());
-                    continue;
-                }
-                
-                int quantityToRestore = item.getQuantity();
-                int newStock = currentStock + quantityToRestore;
-                
-                latestProduct.setStock(newStock);
-                productRepository.save(latestProduct);
-                
-                logger.debug("Restored stock for product {} ({}): {} -> {}", latestProduct.getId(), latestProduct.getName(), currentStock, newStock);
-            }
-        }
+        // Stock is managed per-image in imageDetails
+        // Frontend should update imageDetails when orders are cancelled
+        logger.debug("Stock management is handled per-image in imageDetails. Skipping product-level stock restore.");
     }
 
     public boolean deleteOrder(Long id) {

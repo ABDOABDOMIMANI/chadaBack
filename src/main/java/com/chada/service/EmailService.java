@@ -1,8 +1,11 @@
 package com.chada.service;
 
+import com.chada.dto.ProductImageDTO;
 import com.chada.entity.Order;
 import com.chada.entity.OrderItem;
 import com.chada.entity.Product;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,8 +17,10 @@ import org.springframework.stereotype.Service;
 
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
+import java.math.BigDecimal;
 import java.text.DecimalFormat;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -24,6 +29,7 @@ public class EmailService {
 
     private static final Logger logger = LoggerFactory.getLogger(EmailService.class);
     private final JavaMailSender mailSender;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${spring.mail.username}")
     private String fromEmail;
@@ -296,22 +302,104 @@ public class EmailService {
 
             emailBody.append("<div style='background-color: #fef2f2; padding: 20px; border-radius: 8px; border-left: 5px solid #ef4444; margin-bottom: 20px;'>");
             emailBody.append("<h2 style='color: #ef4444; margin-top: 0;'>حالة المخزون</h2>");
-            emailBody.append("<p style='font-size: 24px; font-weight: bold; color: #ef4444;'>المخزون المتبقي: ").append(product.getStock()).append(" قطعة</p>");
-            emailBody.append("<p style='color: #991b1b;'>⚠️ المخزون منخفض! يرجى تجديد المخزون في أقرب وقت ممكن.</p>");
+            
+            // Parse imageDetails to get stock information
+            List<ProductImageDTO> imageDetails = new ArrayList<>();
+            int totalStock = 0;
+            int minStock = Integer.MAX_VALUE;
+            List<String> lowStockImages = new ArrayList<>();
+            
+            if (product.getImageDetails() != null && !product.getImageDetails().isEmpty()) {
+                try {
+                    imageDetails = objectMapper.readValue(
+                            product.getImageDetails(),
+                            new TypeReference<List<ProductImageDTO>>() {}
+                    );
+                    
+                    for (int i = 0; i < imageDetails.size(); i++) {
+                        ProductImageDTO img = imageDetails.get(i);
+                        Integer quantity = img.getQuantity();
+                        if (quantity != null && quantity > 0) {
+                            totalStock += quantity;
+                            if (quantity < minStock) {
+                                minStock = quantity;
+                            }
+                            if (quantity < 3) {
+                                lowStockImages.add("صورة " + (i + 1) + ": " + quantity + " قطعة");
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.warn("Failed to parse imageDetails for low stock alert: {}", e.getMessage());
+                }
+            }
+            
+            if (totalStock > 0) {
+                emailBody.append("<p style='font-size: 24px; font-weight: bold; color: #ef4444;'>إجمالي المخزون: ").append(totalStock).append(" قطعة</p>");
+                if (minStock < Integer.MAX_VALUE && minStock < 3) {
+                    emailBody.append("<p style='font-size: 18px; font-weight: bold; color: #dc2626;'>أقل كمية متوفرة: ").append(minStock).append(" قطعة</p>");
+                }
+            } else {
+                emailBody.append("<p style='font-size: 24px; font-weight: bold; color: #ef4444;'>المخزون: 0 قطعة (نفد المخزون)</p>");
+            }
+            
+            if (!lowStockImages.isEmpty()) {
+                emailBody.append("<p style='color: #991b1b; margin-top: 10px;'><strong>الصور ذات المخزون المنخفض:</strong></p>");
+                emailBody.append("<ul style='color: #991b1b; margin-left: 20px;'>");
+                for (String imgInfo : lowStockImages) {
+                    emailBody.append("<li>").append(imgInfo).append("</li>");
+                }
+                emailBody.append("</ul>");
+            }
+            
+            emailBody.append("<p style='color: #991b1b; margin-top: 10px;'>⚠️ المخزون منخفض! يرجى تجديد المخزون في أقرب وقت ممكن.</p>");
             emailBody.append("</div>");
 
-            if (product.getPrice() != null) {
-                emailBody.append("<div style='background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin-bottom: 20px;'>");
-                emailBody.append("<h2 style='color: #1a2f4d; margin-top: 0;'>معلومات إضافية</h2>");
-                DecimalFormat df = new DecimalFormat("#,##0.00");
-                emailBody.append("<p><strong>السعر:</strong> ").append(df.format(product.getPrice())).append(" د.م</p>");
-                if (product.getFragrance() != null && !product.getFragrance().isEmpty()) {
-                    emailBody.append("<p><strong>العطر:</strong> ").append(product.getFragrance()).append("</p>");
+            // Additional information section
+            DecimalFormat df = new DecimalFormat("#,##0.00");
+            boolean hasAdditionalInfo = false;
+            StringBuilder additionalInfo = new StringBuilder();
+            additionalInfo.append("<div style='background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin-bottom: 20px;'>");
+            additionalInfo.append("<h2 style='color: #1a2f4d; margin-top: 0;'>معلومات إضافية</h2>");
+            
+            // Show price range from images if available
+            if (!imageDetails.isEmpty()) {
+                BigDecimal minPrice = null;
+                BigDecimal maxPrice = null;
+                for (ProductImageDTO img : imageDetails) {
+                    if (img.getPrice() != null) {
+                        if (minPrice == null || img.getPrice().compareTo(minPrice) < 0) {
+                            minPrice = img.getPrice();
+                        }
+                        if (maxPrice == null || img.getPrice().compareTo(maxPrice) > 0) {
+                            maxPrice = img.getPrice();
+                        }
+                    }
                 }
-                if (product.getVolume() != null) {
-                    emailBody.append("<p><strong>الحجم:</strong> ").append(product.getVolume()).append(" ml</p>");
+                if (minPrice != null && maxPrice != null) {
+                    if (minPrice.compareTo(maxPrice) == 0) {
+                        additionalInfo.append("<p><strong>السعر:</strong> ").append(df.format(minPrice)).append(" د.م</p>");
+                    } else {
+                        additionalInfo.append("<p><strong>نطاق الأسعار:</strong> ").append(df.format(minPrice))
+                                .append(" - ").append(df.format(maxPrice)).append(" د.م</p>");
+                    }
+                    hasAdditionalInfo = true;
                 }
-                emailBody.append("</div>");
+            }
+            
+            if (product.getFragrance() != null && !product.getFragrance().isEmpty()) {
+                additionalInfo.append("<p><strong>العطر:</strong> ").append(product.getFragrance()).append("</p>");
+                hasAdditionalInfo = true;
+            }
+            if (product.getVolume() != null) {
+                additionalInfo.append("<p><strong>الحجم:</strong> ").append(product.getVolume()).append(" ml</p>");
+                hasAdditionalInfo = true;
+            }
+            
+            additionalInfo.append("</div>");
+            
+            if (hasAdditionalInfo) {
+                emailBody.append(additionalInfo);
             }
 
             emailBody.append("<div style='background-color: #d4af37; color: white; padding: 20px; border-radius: 8px; text-align: center;'>");
@@ -324,7 +412,7 @@ public class EmailService {
 
             helper.setText(emailBody.toString(), true);
             mailSender.send(message);
-            logger.info("Low stock alert email sent for product: {} (Stock: {})", product.getName(), product.getStock());
+            logger.info("Low stock alert email sent for product: {} (Total Stock: {})", product.getName(), totalStock);
         } catch (MessagingException e) {
             logger.error("Failed to send low stock alert email for product {}: {}", product.getName(), e.getMessage(), e);
             // Fallback to simple email
@@ -333,10 +421,39 @@ public class EmailService {
                 simpleMessage.setFrom(fromEmail);
                 simpleMessage.setTo(adminEmail);
                 simpleMessage.setSubject("تنبيه: نقص في المخزون - " + product.getName());
+                // Parse imageDetails for simple email
+                int simpleTotalStock = 0;
+                int simpleMinStock = Integer.MAX_VALUE;
+                if (product.getImageDetails() != null && !product.getImageDetails().isEmpty()) {
+                    try {
+                        List<ProductImageDTO> imageDetails = objectMapper.readValue(
+                                product.getImageDetails(),
+                                new TypeReference<List<ProductImageDTO>>() {}
+                        );
+                        for (ProductImageDTO img : imageDetails) {
+                            Integer quantity = img.getQuantity();
+                            if (quantity != null && quantity > 0) {
+                                simpleTotalStock += quantity;
+                                if (quantity < simpleMinStock) {
+                                    simpleMinStock = quantity;
+                                }
+                            }
+                        }
+                    } catch (Exception parseEx) {
+                        logger.warn("Failed to parse imageDetails for simple email: {}", parseEx.getMessage());
+                    }
+                }
+                
+                String stockInfo = simpleTotalStock > 0 
+                    ? (simpleMinStock < Integer.MAX_VALUE && simpleMinStock < 3 
+                        ? "إجمالي: " + simpleTotalStock + " قطعة (أقل كمية: " + simpleMinStock + ")" 
+                        : "إجمالي: " + simpleTotalStock + " قطعة")
+                    : "0 قطعة (نفد المخزون)";
+                
                 simpleMessage.setText("تنبيه: نقص في المخزون\n\n" +
                     "اسم المنتج: " + product.getName() + "\n" +
                     "رقم المنتج: #" + product.getId() + "\n" +
-                    "المخزون المتبقي: " + product.getStock() + " قطعة\n\n" +
+                    "المخزون: " + stockInfo + "\n\n" +
                     "⚠️ المخزون منخفض! يرجى تجديد المخزون في أقرب وقت ممكن.");
                 mailSender.send(simpleMessage);
                 logger.info("Low stock alert email (simple) sent for product: {}", product.getName());
