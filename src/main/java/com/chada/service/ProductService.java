@@ -6,6 +6,8 @@ import com.chada.repository.CategoryRepository;
 import com.chada.repository.ProductRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -17,6 +19,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ProductService {
 
+    private static final Logger logger = LoggerFactory.getLogger(ProductService.class);
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final EmailService emailService;
@@ -133,8 +136,7 @@ public class ProductService {
             try {
                 emailService.sendLowStockAlert(saved);
             } catch (Exception e) {
-                System.err.println("Failed to send low stock alert email: " + e.getMessage());
-                e.printStackTrace();
+                logger.error("Failed to send low stock alert email for product {}: {}", saved.getId(), e.getMessage(), e);
             }
         }
         

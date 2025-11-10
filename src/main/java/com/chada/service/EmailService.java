@@ -4,6 +4,8 @@ import com.chada.entity.Order;
 import com.chada.entity.OrderItem;
 import com.chada.entity.Product;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -20,6 +22,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class EmailService {
 
+    private static final Logger logger = LoggerFactory.getLogger(EmailService.class);
     private final JavaMailSender mailSender;
 
     @Value("${spring.mail.username}")
@@ -31,31 +34,18 @@ public class EmailService {
     public void sendOrderNotification(Order order) {
         // Enhanced validation and logging for production
         if (fromEmail == null || fromEmail.isEmpty()) {
-            System.err.println("========================================");
-            System.err.println("CRITICAL ERROR: Email from address is not configured!");
-            System.err.println("Please set MAIL_USERNAME environment variable in Railway");
-            System.err.println("Current value: " + fromEmail);
-            System.err.println("Environment variable MAIL_USERNAME: " + System.getenv("MAIL_USERNAME"));
-            System.err.println("========================================");
+            logger.error("CRITICAL ERROR: Email from address is not configured! Please set MAIL_USERNAME environment variable in Railway");
             return;
         }
         
         if (adminEmail == null || adminEmail.isEmpty()) {
-            System.err.println("========================================");
-            System.err.println("CRITICAL ERROR: Admin email address is not configured!");
-            System.err.println("Please set ADMIN_EMAIL environment variable in Railway");
-            System.err.println("Current value: " + adminEmail);
-            System.err.println("Environment variable ADMIN_EMAIL: " + System.getenv("ADMIN_EMAIL"));
-            System.err.println("========================================");
+            logger.error("CRITICAL ERROR: Admin email address is not configured! Please set ADMIN_EMAIL environment variable in Railway");
             return;
         }
         
         // Check if mail sender is configured
         if (mailSender == null) {
-            System.err.println("========================================");
-            System.err.println("CRITICAL ERROR: JavaMailSender is not configured!");
-            System.err.println("Please check your email configuration in application.properties");
-            System.err.println("========================================");
+            logger.error("CRITICAL ERROR: JavaMailSender is not configured! Please check your email configuration in application.properties");
             return;
         }
         
@@ -71,15 +61,11 @@ public class EmailService {
      */
     private void sendCustomerConfirmationEmail(Order order) {
         if (order.getCustomerEmail() == null || order.getCustomerEmail().isEmpty()) {
-            System.out.println("Skipping customer email - no customer email provided for order #" + order.getId());
+            logger.debug("Skipping customer email - no customer email provided for order #{}", order.getId());
             return;
         }
         
-        System.out.println("========================================");
-        System.out.println("SENDING CUSTOMER CONFIRMATION EMAIL - Order #" + order.getId());
-        System.out.println("From: " + fromEmail);
-        System.out.println("To: " + order.getCustomerEmail());
-        System.out.println("========================================");
+        logger.info("Sending customer confirmation email for order #{} to {}", order.getId(), order.getCustomerEmail());
         
         try {
             MimeMessage message = mailSender.createMimeMessage();
@@ -147,26 +133,13 @@ public class EmailService {
 
             helper.setText(emailBody.toString(), true);
             mailSender.send(message);
-            System.out.println("========================================");
-            System.out.println("SUCCESS: Customer confirmation email sent successfully!");
-            System.out.println("Order #" + order.getId() + " to " + order.getCustomerEmail());
-            System.out.println("========================================");
+            logger.info("Customer confirmation email sent successfully for order #{} to {}", order.getId(), order.getCustomerEmail());
         } catch (MessagingException e) {
-            System.err.println("========================================");
-            System.err.println("ERROR: Failed to send customer confirmation email for order #" + order.getId());
-            System.err.println("Error Type: " + e.getClass().getName());
-            System.err.println("Error Message: " + e.getMessage());
-            if (e.getCause() != null) {
-                System.err.println("Cause: " + e.getCause().getMessage());
-                System.err.println("Cause Type: " + e.getCause().getClass().getName());
-            }
-            System.err.println("Stack Trace:");
-            e.printStackTrace();
-            System.err.println("========================================");
+            logger.error("Failed to send customer confirmation email for order #{}: {}", order.getId(), e.getMessage(), e);
             
             // Fallback to simple email for customer
             try {
-                System.out.println("Attempting to send simple customer email as fallback...");
+                logger.debug("Attempting to send simple customer email as fallback for order #{}", order.getId());
                 SimpleMailMessage simpleMessage = new SimpleMailMessage();
                 simpleMessage.setFrom(fromEmail);
                 simpleMessage.setTo(order.getCustomerEmail());
@@ -177,22 +150,12 @@ public class EmailService {
                     "\nالإجمالي: " + order.getTotalAmount() + " د.م\n\n" +
                     "سنقوم بالاتصال بك قريباً لتأكيد الطلب.\nشكراً لاختيارك عطور الشدا");
                 mailSender.send(simpleMessage);
-                System.out.println("SUCCESS: Simple customer email sent successfully for order #" + order.getId());
+                logger.info("Simple customer email sent successfully for order #{}", order.getId());
             } catch (Exception ex) {
-                System.err.println("Failed to send simple customer email fallback: " + ex.getMessage());
-                ex.printStackTrace();
+                logger.error("Failed to send simple customer email fallback for order #{}: {}", order.getId(), ex.getMessage(), ex);
             }
         } catch (Exception e) {
-            System.err.println("========================================");
-            System.err.println("CRITICAL: Unexpected error while sending customer confirmation email!");
-            System.err.println("Order #" + order.getId());
-            System.err.println("Error Type: " + e.getClass().getName());
-            System.err.println("Error Message: " + e.getMessage());
-            if (e.getCause() != null) {
-                System.err.println("Cause: " + e.getCause().getMessage());
-            }
-            System.err.println("========================================");
-            e.printStackTrace();
+            logger.error("Unexpected error while sending customer confirmation email for order #{}: {}", order.getId(), e.getMessage(), e);
         }
     }
     
@@ -200,14 +163,7 @@ public class EmailService {
      * Send notification email to admin
      */
     private void sendAdminNotificationEmail(Order order) {
-        System.out.println("========================================");
-        System.out.println("SENDING ADMIN NOTIFICATION EMAIL - Order #" + order.getId());
-        System.out.println("From: " + fromEmail);
-        System.out.println("To: " + adminEmail);
-        System.out.println("Mail Host: " + System.getenv().getOrDefault("MAIL_HOST", "smtp.gmail.com"));
-        System.out.println("Mail Port: " + System.getenv().getOrDefault("MAIL_PORT", "587"));
-        System.out.println("Environment: " + (System.getenv("RAILWAY_ENVIRONMENT") != null ? "Railway (Production)" : "Local"));
-        System.out.println("========================================");
+        logger.info("Sending admin notification email for order #{} to {}", order.getId(), adminEmail);
         
         try {
             MimeMessage message = mailSender.createMimeMessage();
@@ -279,26 +235,13 @@ public class EmailService {
 
             helper.setText(emailBody.toString(), true);
             mailSender.send(message);
-            System.out.println("========================================");
-            System.out.println("SUCCESS: Admin notification email sent successfully!");
-            System.out.println("Order #" + order.getId() + " to " + adminEmail);
-            System.out.println("========================================");
+            logger.info("Admin notification email sent successfully for order #{} to {}", order.getId(), adminEmail);
         } catch (MessagingException e) {
-            System.err.println("========================================");
-            System.err.println("ERROR: Failed to send admin notification email for order #" + order.getId());
-            System.err.println("Error Type: " + e.getClass().getName());
-            System.err.println("Error Message: " + e.getMessage());
-            if (e.getCause() != null) {
-                System.err.println("Cause: " + e.getCause().getMessage());
-                System.err.println("Cause Type: " + e.getCause().getClass().getName());
-            }
-            System.err.println("Stack Trace:");
-            e.printStackTrace();
-            System.err.println("========================================");
+            logger.error("Failed to send admin notification email for order #{}: {}", order.getId(), e.getMessage(), e);
             
             // Fallback to simple email for admin
             try {
-                System.out.println("Attempting to send simple admin email as fallback...");
+                logger.debug("Attempting to send simple admin email as fallback for order #{}", order.getId());
                 SimpleMailMessage simpleMessage = new SimpleMailMessage();
                 simpleMessage.setFrom(fromEmail);
                 simpleMessage.setTo(adminEmail);
@@ -309,46 +252,14 @@ public class EmailService {
                     "\nالهاتف: " + order.getCustomerPhone() + 
                     "\nالإجمالي: " + order.getTotalAmount() + " د.م");
                 mailSender.send(simpleMessage);
-                System.out.println("SUCCESS: Simple admin email sent successfully for order #" + order.getId());
+                logger.info("Simple admin email sent successfully for order #{}", order.getId());
             } catch (Exception ex) {
-                System.err.println("========================================");
-                System.err.println("CRITICAL: Failed to send simple admin email fallback!");
-                System.err.println("Order #" + order.getId());
-                System.err.println("Error Type: " + ex.getClass().getName());
-                System.err.println("Error Message: " + ex.getMessage());
-                if (ex.getCause() != null) {
-                    System.err.println("Cause: " + ex.getCause().getMessage());
-                    System.err.println("Cause Type: " + ex.getCause().getClass().getName());
-                }
-                System.err.println("Stack Trace:");
-                ex.printStackTrace();
-                System.err.println("========================================");
-                
-                // Additional diagnostics for production
-                System.err.println("DIAGNOSTICS:");
-                System.err.println("- MAIL_HOST: " + System.getenv("MAIL_HOST"));
-                System.err.println("- MAIL_PORT: " + System.getenv("MAIL_PORT"));
-                System.err.println("- MAIL_USERNAME set: " + (System.getenv("MAIL_USERNAME") != null));
-                System.err.println("- MAIL_PASSWORD set: " + (System.getenv("MAIL_PASSWORD") != null));
-                System.err.println("- ADMIN_EMAIL set: " + (System.getenv("ADMIN_EMAIL") != null));
-                System.err.println("========================================");
-                
-                // Don't throw - just log the error so order creation doesn't fail
-                System.err.println("WARNING: Order was created but admin email notification failed!");
+                logger.error("Failed to send simple admin email fallback for order #{}: {}", order.getId(), ex.getMessage(), ex);
+                logger.warn("Order #{} was created but admin email notification failed", order.getId());
             }
         } catch (Exception e) {
-            System.err.println("========================================");
-            System.err.println("CRITICAL: Unexpected error while sending admin notification email!");
-            System.err.println("Order #" + order.getId());
-            System.err.println("Error Type: " + e.getClass().getName());
-            System.err.println("Error Message: " + e.getMessage());
-            if (e.getCause() != null) {
-                System.err.println("Cause: " + e.getCause().getMessage());
-            }
-            System.err.println("========================================");
-            e.printStackTrace();
-            // Don't throw - just log the error so order creation doesn't fail
-            System.err.println("WARNING: Order was created but admin email notification failed!");
+            logger.error("Unexpected error while sending admin notification email for order #{}: {}", order.getId(), e.getMessage(), e);
+            logger.warn("Order #{} was created but admin email notification failed", order.getId());
         }
     }
     
@@ -413,9 +324,9 @@ public class EmailService {
 
             helper.setText(emailBody.toString(), true);
             mailSender.send(message);
-            System.out.println("Low stock alert email sent for product: " + product.getName() + " (Stock: " + product.getStock() + ")");
+            logger.info("Low stock alert email sent for product: {} (Stock: {})", product.getName(), product.getStock());
         } catch (MessagingException e) {
-            e.printStackTrace();
+            logger.error("Failed to send low stock alert email for product {}: {}", product.getName(), e.getMessage(), e);
             // Fallback to simple email
             try {
                 SimpleMailMessage simpleMessage = new SimpleMailMessage();
@@ -428,9 +339,9 @@ public class EmailService {
                     "المخزون المتبقي: " + product.getStock() + " قطعة\n\n" +
                     "⚠️ المخزون منخفض! يرجى تجديد المخزون في أقرب وقت ممكن.");
                 mailSender.send(simpleMessage);
-                System.out.println("Low stock alert email (simple) sent for product: " + product.getName());
+                logger.info("Low stock alert email (simple) sent for product: {}", product.getName());
             } catch (Exception ex) {
-                ex.printStackTrace();
+                logger.error("Failed to send simple low stock alert email for product {}: {}", product.getName(), ex.getMessage(), ex);
             }
         }
     }

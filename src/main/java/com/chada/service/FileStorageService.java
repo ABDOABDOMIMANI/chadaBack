@@ -1,5 +1,7 @@
 package com.chada.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -22,6 +24,8 @@ import java.util.UUID;
 @Service
 public class FileStorageService {
 
+    private static final Logger logger = LoggerFactory.getLogger(FileStorageService.class);
+    
     @Value("${file.upload-dir.absolute}")
     private String uploadDir;
     
@@ -84,19 +88,18 @@ public class FileStorageService {
                 Files.copy(optimizedImageStream, targetLocation, StandardCopyOption.REPLACE_EXISTING);
                 optimizedImageStream.close();
                 
-                System.out.println("Successfully optimized and saved image: " + uniqueFileName);
+                logger.debug("Successfully optimized and saved image: {}", uniqueFileName);
             } catch (Exception e) {
                 // If optimization fails, save original - don't let optimization break uploads
-                System.err.println("Warning: Image optimization failed for " + uniqueFileName + ", saving original: " + e.getMessage());
-                e.printStackTrace();
+                logger.warn("Image optimization failed for {}, saving original: {}", uniqueFileName, e.getMessage());
                 try {
                     // Reset and save original
                     InputStream originalStream = file.getInputStream();
                     Files.copy(originalStream, targetLocation, StandardCopyOption.REPLACE_EXISTING);
                     originalStream.close();
-                    System.out.println("Saved original image (optimization skipped): " + uniqueFileName);
+                    logger.debug("Saved original image (optimization skipped): {}", uniqueFileName);
                 } catch (IOException ioException) {
-                    System.err.println("CRITICAL: Failed to save image even as original: " + ioException.getMessage());
+                    logger.error("CRITICAL: Failed to save image even as original: {}", uniqueFileName, ioException);
                     throw ioException;
                 }
             }

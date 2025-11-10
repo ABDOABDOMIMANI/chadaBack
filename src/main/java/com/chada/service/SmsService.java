@@ -2,6 +2,8 @@ package com.chada.service;
 
 import com.chada.entity.Order;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -17,6 +19,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class SmsService {
 
+    private static final Logger logger = LoggerFactory.getLogger(SmsService.class);
+    
     @Value("${sms.api.url:}")
     private String smsApiUrl;
     
@@ -33,8 +37,7 @@ public class SmsService {
             String message = buildOrderMessage(order);
             sendSms(smsPhoneNumber, message);
         } catch (Exception e) {
-            System.err.println("Failed to send SMS notification: " + e.getMessage());
-            e.printStackTrace();
+            logger.error("Failed to send SMS notification for order #{}: {}", order.getId(), e.getMessage(), e);
         }
     }
 
@@ -57,7 +60,7 @@ public class SmsService {
         
         if (smsApiUrl == null || smsApiUrl.isEmpty()) {
             // If no SMS API is configured, log the message
-            System.out.println("SMS would be sent to " + phoneNumber + ": " + message);
+            logger.debug("SMS would be sent to {}: {}", phoneNumber, message);
             return;
         }
 
@@ -76,13 +79,12 @@ public class SmsService {
             ResponseEntity<String> response = restTemplate.postForEntity(smsApiUrl, request, String.class);
 
             if (response.getStatusCode().is2xxSuccessful()) {
-                System.out.println("SMS sent successfully to " + phoneNumber);
+                logger.info("SMS sent successfully to {}", phoneNumber);
             } else {
-                System.err.println("Failed to send SMS: " + response.getStatusCode());
+                logger.error("Failed to send SMS to {}: {}", phoneNumber, response.getStatusCode());
             }
         } catch (Exception e) {
-            System.err.println("Error sending SMS: " + e.getMessage());
-            e.printStackTrace();
+            logger.error("Error sending SMS to {}: {}", phoneNumber, e.getMessage(), e);
         }
     }
 }

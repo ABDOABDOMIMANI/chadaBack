@@ -30,7 +30,7 @@ public class ReviewController {
         return ResponseEntity.ok(reviews);
     }
 
-    @GetMapping("/product/{productId}/stats")
+    @GetMapping(value = "/product/{productId}/stats", produces = "application/json")
     public ResponseEntity<Map<String, Object>> getReviewStatsByProductId(@PathVariable Long productId) {
         Double averageRating = reviewService.getAverageRatingForProduct(productId);
         Long reviewCount = reviewService.getReviewCountForProduct(productId);
@@ -38,7 +38,9 @@ public class ReviewController {
         Map<String, Object> stats = new HashMap<>();
         stats.put("averageRating", averageRating != null ? averageRating : 0.0);
         stats.put("reviewCount", reviewCount != null ? reviewCount : 0L);
-        return ResponseEntity.ok(stats);
+        return ResponseEntity.ok()
+                .header("Content-Type", "application/json")
+                .body(stats);
     }
 
     @GetMapping("/{id}")

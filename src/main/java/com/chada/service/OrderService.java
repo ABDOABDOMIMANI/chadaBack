@@ -8,6 +8,8 @@ import com.chada.entity.Product;
 import com.chada.repository.OrderRepository;
 import com.chada.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -24,6 +26,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class OrderService {
 
+    private static final Logger logger = LoggerFactory.getLogger(OrderService.class);
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
     private final EmailService emailService;
@@ -73,16 +76,10 @@ public class OrderService {
         // Send email notification
         try {
             emailService.sendOrderNotification(savedOrder);
-            System.out.println("Email notification sent successfully for order #" + savedOrder.getId());
+            logger.info("Email notification sent successfully for order #{}", savedOrder.getId());
         } catch (Exception e) {
             // Log error but don't fail the order creation
-            System.err.println("CRITICAL: Failed to send email notification for order #" + savedOrder.getId());
-            System.err.println("Error type: " + e.getClass().getName());
-            System.err.println("Error message: " + e.getMessage());
-            if (e.getCause() != null) {
-                System.err.println("Cause: " + e.getCause().getMessage());
-            }
-            e.printStackTrace();
+            logger.error("Failed to send email notification for order #{}: {}", savedOrder.getId(), e.getMessage(), e);
         }
 
         // Send SMS notification
@@ -90,18 +87,16 @@ public class OrderService {
             smsService.sendOrderNotification(savedOrder);
         } catch (Exception e) {
             // Log error but don't fail the order creation
-            System.err.println("Failed to send SMS notification: " + e.getMessage());
-            e.printStackTrace();
+            logger.error("Failed to send SMS notification for order #{}: {}", savedOrder.getId(), e.getMessage(), e);
         }
 
         // Broadcast WebSocket notification for real-time updates
         try {
             webSocketController.broadcastNewOrder(savedOrder);
-            System.out.println("WebSocket notification broadcasted for order #" + savedOrder.getId());
+            logger.debug("WebSocket notification broadcasted for order #{}", savedOrder.getId());
         } catch (Exception e) {
             // Log error but don't fail the order creation
-            System.err.println("Failed to broadcast WebSocket notification: " + e.getMessage());
-            e.printStackTrace();
+            logger.error("Failed to broadcast WebSocket notification for order #{}: {}", savedOrder.getId(), e.getMessage(), e);
         }
 
         return savedOrder;
@@ -177,7 +172,7 @@ public class OrderService {
                 // If product uses per-image stock (stock is null), skip stock management
                 // Stock is managed via imageDetails in the frontend
                 if (currentStock == null) {
-                    System.out.println("Product " + latestProduct.getId() + " uses per-image stock management. Skipping product-level stock update.");
+                    logger.debug("Product {} uses per-image stock management. Skipping product-level stock update.", latestProduct.getId());
                     continue;
                 }
                 
@@ -196,14 +191,13 @@ public class OrderService {
                     try {
                         emailService.sendLowStockAlert(latestProduct);
                     } catch (Exception e) {
-                        System.err.println("Failed to send low stock alert email: " + e.getMessage());
-                        e.printStackTrace();
+                        logger.error("Failed to send low stock alert email for product {}: {}", latestProduct.getId(), e.getMessage(), e);
                     }
                 }
                 
                 // Log if stock went to zero
                 if (newStock == 0) {
-                    System.out.println("Warning: Product " + latestProduct.getId() + " (" + latestProduct.getName() + ") stock is now 0");
+                    logger.warn("Product {} ({}) stock is now 0", latestProduct.getId(), latestProduct.getName());
                 }
             }
         }
@@ -229,7 +223,7 @@ public class OrderService {
                 
                 // If product uses per-image stock (stock is null), skip stock management
                 if (currentStock == null) {
-                    System.out.println("Product " + latestProduct.getId() + " uses per-image stock management. Skipping product-level stock restore.");
+                    logger.debug("Product {} uses per-image stock management. Skipping product-level stock restore.", latestProduct.getId());
                     continue;
                 }
                 
@@ -239,8 +233,7 @@ public class OrderService {
                 latestProduct.setStock(newStock);
                 productRepository.save(latestProduct);
                 
-                System.out.println("Restored stock for product " + latestProduct.getId() + 
-                        " (" + latestProduct.getName() + "): " + currentStock + " -> " + newStock);
+                logger.debug("Restored stock for product {} ({}): {} -> {}", latestProduct.getId(), latestProduct.getName(), currentStock, newStock);
             }
         }
     }
