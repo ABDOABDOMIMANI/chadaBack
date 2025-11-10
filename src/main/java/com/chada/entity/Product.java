@@ -80,10 +80,26 @@ public class Product {
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
+        // Ensure price and stock are never null (database constraint)
+        // Set to 0 as placeholder for per-image pricing/stock
+        if (this.price == null) {
+            this.price = BigDecimal.ZERO;
+        }
+        if (this.stock == null) {
+            this.stock = 0;
+        }
     }
 
     @PreUpdate
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
+        // Ensure price and stock are never null (database constraint)
+        // Set to 0 as placeholder for per-image pricing/stock
+        if (this.price == null) {
+            this.price = BigDecimal.ZERO;
+        }
+        if (this.stock == null) {
+            this.stock = 0;
+        }
     }
 }

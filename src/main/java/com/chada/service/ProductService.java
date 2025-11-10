@@ -57,6 +57,15 @@ public class ProductService {
         product.setCategory(category);
         product.setActive(true);
         
+        // Set default values for price and stock if null (for per-image pricing/stock)
+        // Database may still have NOT NULL constraint, so we set 0 as placeholder
+        if (product.getPrice() == null) {
+            product.setPrice(BigDecimal.ZERO);
+        }
+        if (product.getStock() == null) {
+            product.setStock(0);
+        }
+        
         // Handle promotion pricing
         handlePromotionPricing(product);
 
@@ -71,7 +80,12 @@ public class ProductService {
 
         existing.setName(updatedProduct.getName());
         existing.setDescription(updatedProduct.getDescription());
-        existing.setStock(updatedProduct.getStock());
+        // Set default values for stock if null (for per-image stock)
+        if (updatedProduct.getStock() != null) {
+            existing.setStock(updatedProduct.getStock());
+        } else {
+            existing.setStock(0); // Default to 0 if null (per-image stock)
+        }
         existing.setImageUrl(updatedProduct.getImageUrl());
         existing.setImageUrls(updatedProduct.getImageUrls());
         existing.setImageDetails(updatedProduct.getImageDetails()); // New field for image details
@@ -121,11 +135,10 @@ public class ProductService {
                 // Clear original price since there's no promotion
                 existing.setOriginalPrice(null);
             } else {
-                // If price not provided and we had a promotion, restore original price
-                if (existing.getOriginalPrice() != null) {
-                    existing.setPrice(existing.getOriginalPrice());
-                    existing.setOriginalPrice(null);
-                }
+                // If price not provided, set to 0 (per-image pricing)
+                existing.setPrice(BigDecimal.ZERO);
+                // If we had a promotion, clear original price
+                existing.setOriginalPrice(null);
             }
         }
 
@@ -146,15 +159,20 @@ public class ProductService {
     private void handlePromotionPricing(Product product) {
         if (product.getDiscountPercentage() != null && product.getDiscountPercentage() > 0) {
             // If original price is not set, use current price as original (if price exists)
-            if (product.getOriginalPrice() == null && product.getPrice() != null) {
+            if (product.getOriginalPrice() == null && product.getPrice() != null && product.getPrice().compareTo(BigDecimal.ZERO) > 0) {
                 product.setOriginalPrice(product.getPrice());
             }
             // Calculate discounted price only if original price exists
-            if (product.getOriginalPrice() != null) {
+            if (product.getOriginalPrice() != null && product.getOriginalPrice().compareTo(BigDecimal.ZERO) > 0) {
                 BigDecimal discountAmount = product.getOriginalPrice()
                         .multiply(BigDecimal.valueOf(product.getDiscountPercentage()))
                         .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
                 product.setPrice(product.getOriginalPrice().subtract(discountAmount));
+            } else {
+                // If no valid original price, ensure price is at least 0
+                if (product.getPrice() == null) {
+                    product.setPrice(BigDecimal.ZERO);
+                }
             }
         } else {
             // No promotion, clear promotion fields
@@ -162,6 +180,10 @@ public class ProductService {
             product.setOriginalPrice(null);
             product.setPromotionStartDate(null);
             product.setPromotionEndDate(null);
+            // Ensure price is not null
+            if (product.getPrice() == null) {
+                product.setPrice(BigDecimal.ZERO);
+            }
         }
     }
 
