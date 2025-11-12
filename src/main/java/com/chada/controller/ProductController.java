@@ -78,10 +78,8 @@ public class ProductController {
             return ResponseEntity.ok(createdProduct);
         } catch (Exception e) {
             logger.error("Error creating product with images: {}", e.getMessage(), e);
-            // Return error with CORS headers
-            return ResponseEntity.badRequest()
-                    .header("Access-Control-Allow-Origin", "*")
-                    .body(null);
+            // CORS headers are handled by CorsFilter
+            return ResponseEntity.badRequest().body(null);
         }
     }
 
@@ -115,10 +113,8 @@ public class ProductController {
             return ResponseEntity.ok(updated);
         } catch (Exception e) {
             logger.error("Error updating product with images: {}", e.getMessage(), e);
-            // Return error with CORS headers
-            return ResponseEntity.badRequest()
-                    .header("Access-Control-Allow-Origin", "*")
-                    .body(null);
+            // CORS headers are handled by CorsFilter
+            return ResponseEntity.badRequest().body(null);
         }
     }
 

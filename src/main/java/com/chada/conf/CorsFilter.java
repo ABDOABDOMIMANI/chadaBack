@@ -21,23 +21,26 @@ public class CorsFilter implements Filter {
 
         String origin = request.getHeader("Origin");
         
-        // Allow specific origins - must be specific origin (not *) when using credentials
-        if (origin != null && (
-            origin.startsWith("http://localhost:") ||
-            origin.endsWith(".netlify.app") ||
-            origin.equals("https://chadaparfum.netlify.app") ||
-            origin.equals("https://chada-admin.netlify.app") ||
-            origin.equals("https://chadaback-production.up.railway.app")
-        )) {
-            response.setHeader("Access-Control-Allow-Origin", origin);
-            response.setHeader("Access-Control-Allow-Credentials", "true");
-        } else if (origin != null) {
-            // For other origins, allow but without credentials
-            response.setHeader("Access-Control-Allow-Origin", origin);
-            response.setHeader("Access-Control-Allow-Credentials", "false");
-        } else {
-            // No origin header, allow all
-            response.setHeader("Access-Control-Allow-Origin", "*");
+        // Only set CORS headers if not already set (avoid duplicates)
+        if (!response.containsHeader("Access-Control-Allow-Origin")) {
+            // Allow specific origins - must be specific origin (not *) when using credentials
+            if (origin != null && (
+                origin.startsWith("http://localhost:") ||
+                origin.endsWith(".netlify.app") ||
+                origin.equals("https://chadaparfum.netlify.app") ||
+                origin.equals("https://chada-admin.netlify.app") ||
+                origin.equals("https://chadaback-production.up.railway.app")
+            )) {
+                response.setHeader("Access-Control-Allow-Origin", origin);
+                response.setHeader("Access-Control-Allow-Credentials", "true");
+            } else if (origin != null) {
+                // For other origins, allow but without credentials
+                response.setHeader("Access-Control-Allow-Origin", origin);
+                response.setHeader("Access-Control-Allow-Credentials", "false");
+            } else {
+                // No origin header, allow all
+                response.setHeader("Access-Control-Allow-Origin", "*");
+            }
         }
         response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD");
         response.setHeader("Access-Control-Max-Age", "3600");
