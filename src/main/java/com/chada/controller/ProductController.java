@@ -3,6 +3,7 @@ package com.chada.controller;
 import com.chada.entity.Product;
 import com.chada.service.FileStorageService;
 import com.chada.service.ProductService;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -12,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @RestController
@@ -98,15 +100,50 @@ public class ProductController {
             @RequestPart("product") String productJson,
             @RequestPart(value = "images", required = false) MultipartFile[] images) {
         try {
+            // Get existing product first to preserve images
+            Product existingProduct = productService.getProductById(id);
             Product product = objectMapper.readValue(productJson, Product.class);
             
-            // Handle image uploads
+            // Handle image uploads - merge new images with existing ones
             if (images != null && images.length > 0) {
-                List<String> imageUrls = fileStorageService.storeFiles(images);
-                product.setImageUrls(objectMapper.writeValueAsString(imageUrls));
-                if (imageUrls.size() > 0) {
-                    product.setImageUrl(imageUrls.get(0)); // Set first image as main image
+                List<String> newImageUrls = fileStorageService.storeFiles(images);
+                
+                // Get existing image URLs
+                List<String> existingImageUrls = new ArrayList<>();
+                if (existingProduct.getImageUrls() != null && !existingProduct.getImageUrls().isEmpty()) {
+                    try {
+                        existingImageUrls = objectMapper.readValue(existingProduct.getImageUrls(), 
+                            new TypeReference<List<String>>() {});
+                    } catch (Exception e) {
+                        logger.warn("Failed to parse existing imageUrls: {}", e.getMessage());
+                    }
                 }
+                
+                // Merge: keep existing images first, then add new ones (max 4 total)
+                List<String> allImageUrls = new ArrayList<>(existingImageUrls);
+                for (String newUrl : newImageUrls) {
+                    if (!allImageUrls.contains(newUrl) && allImageUrls.size() < 4) {
+                        allImageUrls.add(newUrl);
+                    }
+                }
+                
+                product.setImageUrls(objectMapper.writeValueAsString(allImageUrls));
+                
+                // Preserve main image if it exists, otherwise use first image
+                if (existingProduct.getImageUrl() != null && !existingProduct.getImageUrl().isEmpty()) {
+                    product.setImageUrl(existingProduct.getImageUrl());
+                } else if (allImageUrls.size() > 0) {
+                    product.setImageUrl(allImageUrls.get(0));
+                }
+            } else {
+                // No new images, preserve existing ones
+                product.setImageUrls(existingProduct.getImageUrls());
+                product.setImageUrl(existingProduct.getImageUrl());
+            }
+            
+            // Preserve imageDetails if not provided in update (frontend should send complete imageDetails)
+            if (product.getImageDetails() == null || product.getImageDetails().isEmpty()) {
+                product.setImageDetails(existingProduct.getImageDetails());
             }
             
             Product updated = productService.updateProduct(id, product);
