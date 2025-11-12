@@ -36,9 +36,9 @@ public class FileStorageService {
     private long skipOptimizationSize;
     
     // Maximum image dimensions (reduced for faster processing)
-    private static final int MAX_IMAGE_WIDTH = 1200;
-    private static final int MAX_IMAGE_HEIGHT = 1200;
-    private static final float JPEG_QUALITY = 0.80f; // 80% quality for faster processing
+    private static final int MAX_IMAGE_WIDTH = 1600;
+    private static final int MAX_IMAGE_HEIGHT = 1600;
+    private static final float JPEG_QUALITY = 0.75f; // 75% quality for faster processing
 
     public List<String> storeFiles(MultipartFile[] files) throws IOException {
         List<String> fileUrls = new ArrayList<>();
@@ -52,13 +52,47 @@ public class FileStorageService {
         // Limit to 4 images
         int maxImages = Math.min(files.length, 4);
         
-        for (int i = 0; i < maxImages; i++) {
-            MultipartFile file = files[i];
-            if (file != null && !file.isEmpty()) {
-                String fileName = storeFile(file);
-                if (fileName != null) {
-                    fileUrls.add("/api/images/" + fileName);
+        // Process images in parallel for better performance
+        List<java.util.concurrent.Future<String>> futures = new ArrayList<>();
+        java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(Math.min(maxImages, 4));
+        
+        try {
+            for (int i = 0; i < maxImages; i++) {
+                MultipartFile file = files[i];
+                if (file != null && !file.isEmpty()) {
+                    final MultipartFile finalFile = file;
+                    java.util.concurrent.Future<String> future = executor.submit(() -> {
+                        try {
+                            return storeFile(finalFile);
+                        } catch (IOException e) {
+                            logger.error("Error storing file {}: {}", finalFile.getOriginalFilename(), e.getMessage());
+                            return null;
+                        }
+                    });
+                    futures.add(future);
                 }
+            }
+            
+            // Collect results
+            for (java.util.concurrent.Future<String> future : futures) {
+                try {
+                    String fileName = future.get();
+                    if (fileName != null) {
+                        fileUrls.add("/api/images/" + fileName);
+                    }
+                } catch (Exception e) {
+                    logger.error("Error getting file upload result: {}", e.getMessage());
+                }
+            }
+        } finally {
+            executor.shutdown();
+            try {
+                if (!executor.awaitTermination(30, java.util.concurrent.TimeUnit.SECONDS)) {
+                    executor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                executor.shutdownNow();
+                Thread.currentThread().interrupt();
             }
         }
 
@@ -84,15 +118,15 @@ public class FileStorageService {
         
         // Check if it's an image file
         if (isImageFile(fileExtension) && optimizationEnabled) {
-            // Skip optimization for small files to speed up upload
+            // Only optimize very large files (>5MB) to speed up uploads
             long fileSize = file.getSize();
             if (fileSize > 0 && fileSize < skipOptimizationSize) {
-                // Small file, save directly without optimization
+                // Small/medium file, save directly without optimization for speed
                 Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
-                logger.debug("Saved small image without optimization: {} ({} bytes)", uniqueFileName, fileSize);
+                logger.debug("Saved image without optimization (size: {} bytes): {}", fileSize, uniqueFileName);
             } else {
                 try {
-                    // Try to optimize image before saving (only for larger files)
+                    // Only optimize very large files
                     InputStream imageStream = file.getInputStream();
                     InputStream optimizedImageStream = optimizeImage(imageStream, fileExtension);
                     
@@ -100,9 +134,9 @@ public class FileStorageService {
                     Files.copy(optimizedImageStream, targetLocation, StandardCopyOption.REPLACE_EXISTING);
                     optimizedImageStream.close();
                     
-                    logger.debug("Successfully optimized and saved image: {}", uniqueFileName);
+                    logger.debug("Successfully optimized and saved large image: {} (original: {} bytes)", uniqueFileName, fileSize);
                 } catch (Exception e) {
-                    // If optimization fails, save original - don't let optimization break uploads
+                    // If optimization fails, save original immediately - don't let optimization break uploads
                     logger.warn("Image optimization failed for {}, saving original: {}", uniqueFileName, e.getMessage());
                     try {
                         // Reset and save original
@@ -117,11 +151,9 @@ public class FileStorageService {
                 }
             }
         } else {
-            // Not an image or optimization disabled, save as-is
+            // Not an image or optimization disabled, save as-is (FASTEST PATH)
             Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
-            if (!optimizationEnabled && isImageFile(fileExtension)) {
-                logger.debug("Saved image without optimization (disabled): {}", uniqueFileName);
-            }
+            logger.debug("Saved file without optimization: {}", uniqueFileName);
         }
 
         return uniqueFileName;
@@ -158,22 +190,22 @@ public class FileStorageService {
                 newHeight = (int) (originalHeight * scale);
             }
             
-            // Resize image if needed - use faster scaling for better performance
+            // Resize image if needed - use fastest scaling algorithm
             BufferedImage resizedImage;
             if (newWidth != originalWidth || newHeight != originalHeight) {
-                // Use faster scaling algorithm (nearest neighbor for speed, or bilinear for quality)
-                // Using SCALE_SMOOTH for better quality but still fast
-                java.awt.Image scaledImage = originalImage.getScaledInstance(newWidth, newHeight, java.awt.Image.SCALE_SMOOTH);
+                // Use fastest scaling algorithm for speed
+                java.awt.Image scaledImage = originalImage.getScaledInstance(newWidth, newHeight, java.awt.Image.SCALE_FAST);
                 resizedImage = new BufferedImage(newWidth, newHeight, BufferedImage.TYPE_INT_RGB);
                 Graphics2D g = resizedImage.createGraphics();
-                // Use faster rendering hints
-                g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                // Use fastest rendering hints
+                g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
                 g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED);
                 g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
+                g.setRenderingHint(RenderingHints.KEY_ALPHA_INTERPOLATION, RenderingHints.VALUE_ALPHA_INTERPOLATION_SPEED);
                 g.drawImage(scaledImage, 0, 0, null);
                 g.dispose();
             } else {
-                // Convert to RGB if needed (for JPEG)
+                // Convert to RGB if needed (for JPEG) - minimal processing
                 if (extension.equals(".jpg") || extension.equals(".jpeg")) {
                     resizedImage = new BufferedImage(originalWidth, originalHeight, BufferedImage.TYPE_INT_RGB);
                     Graphics2D g = resizedImage.createGraphics();

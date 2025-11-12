@@ -21,8 +21,9 @@ public class CorsConfig {
                                 "https://chadaback-production.up.railway.app",
                                 "https://chada-admin.netlify.app"
                         )
-                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
+                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD")
                         .allowedHeaders("*")
+                        .exposedHeaders("*")
                         .allowCredentials(true)
                         .maxAge(3600);
             }

@@ -5,6 +5,8 @@ import com.chada.service.FileStorageService;
 import com.chada.service.ProductService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -15,8 +17,10 @@ import java.util.List;
 @RestController
 @RequestMapping("/products")
 @RequiredArgsConstructor
+@CrossOrigin(origins = {"https://chada-admin.netlify.app", "https://chadaparfum.netlify.app", "http://localhost:3000", "http://localhost:3001"}, allowCredentials = "true")
 public class ProductController {
 
+    private static final Logger logger = LoggerFactory.getLogger(ProductController.class);
     private final ProductService productService;
     private final FileStorageService fileStorageService;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -54,6 +58,7 @@ public class ProductController {
 
     // ✅ Create product with file upload (accepts multipart/form-data)
     @PostMapping(value = "/with-images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @CrossOrigin(origins = {"https://chada-admin.netlify.app", "https://chadaparfum.netlify.app", "http://localhost:3000", "http://localhost:3001"}, allowCredentials = "true")
     public ResponseEntity<Product> createProductWithImages(
             @RequestPart("product") String productJson,
             @RequestPart(value = "images", required = false) MultipartFile[] images) {
@@ -72,8 +77,11 @@ public class ProductController {
             Product createdProduct = productService.createProduct(product);
             return ResponseEntity.ok(createdProduct);
         } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.badRequest().build();
+            logger.error("Error creating product with images: {}", e.getMessage(), e);
+            // Return error with CORS headers
+            return ResponseEntity.badRequest()
+                    .header("Access-Control-Allow-Origin", "*")
+                    .body(null);
         }
     }
 
@@ -86,6 +94,7 @@ public class ProductController {
 
     // ✅ Update product with file upload (accepts multipart/form-data)
     @PutMapping(value = "/{id}/with-images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @CrossOrigin(origins = {"https://chada-admin.netlify.app", "https://chadaparfum.netlify.app", "http://localhost:3000", "http://localhost:3001"}, allowCredentials = "true")
     public ResponseEntity<Product> updateProductWithImages(
             @PathVariable Long id,
             @RequestPart("product") String productJson,
@@ -105,8 +114,11 @@ public class ProductController {
             Product updated = productService.updateProduct(id, product);
             return ResponseEntity.ok(updated);
         } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.badRequest().build();
+            logger.error("Error updating product with images: {}", e.getMessage(), e);
+            // Return error with CORS headers
+            return ResponseEntity.badRequest()
+                    .header("Access-Control-Allow-Origin", "*")
+                    .body(null);
         }
     }
 
